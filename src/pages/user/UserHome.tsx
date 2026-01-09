@@ -1,56 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ParkCard from '@/components/ParkCard';
 import { Input } from '@/components/ui/input';
-import { Search, MapPin } from 'lucide-react';
+import { Search, MapPin, Loader2 } from 'lucide-react';
+import api from '@/lib/api';
+import { toast } from 'sonner';
 
-const mockParks = [
-  {
-    id: '1',
-    name: 'MG Road Parking Hub',
-    address: '123 MG Road, Bengaluru',
-    distance: '0.8 km',
-    availableSlots: 12,
-    totalSlots: 50,
-    pricePerHour: 40,
-  },
-  {
-    id: '2',
-    name: 'Phoenix Mall Basement',
-    address: 'Phoenix Marketcity, Whitefield',
-    distance: '1.2 km',
-    availableSlots: 35,
-    totalSlots: 200,
-    pricePerHour: 60,
-  },
-  {
-    id: '3',
-    name: 'Indiranagar Metro Station',
-    address: 'CMH Road, Indiranagar',
-    distance: '2.1 km',
-    availableSlots: 5,
-    totalSlots: 30,
-    pricePerHour: 30,
-  },
-  {
-    id: '4',
-    name: 'UB City Premium Parking',
-    address: 'Vittal Mallya Road',
-    distance: '3.5 km',
-    availableSlots: 28,
-    totalSlots: 100,
-    pricePerHour: 80,
-  },
-];
+interface Park {
+  id: number;
+  name: string;
+  location: string;
+  distance: number;
+  available_slots: number;
+  total_slots: number;
+  hourly_rate: number;
+}
 
 const UserHome = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [parks, setParks] = useState<Park[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const filteredParks = mockParks.filter(
+  useEffect(() => {
+    fetchNearbyParks();
+  }, []);
+
+  const fetchNearbyParks = async () => {
+    try {
+      // Mocking user location for demo (e.g., Bengaluru)
+      const lat = 12.9716;
+      const lon = 77.5946;
+      const response = await api.get(`/user/parks/nearby?lat=${lat}&lon=${lon}&radius=10`);
+      setParks(response.data);
+    } catch (error) {
+      console.error('Failed to fetch parks', error);
+      toast.error('Could not load nearby parks');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredParks = parks.filter(
     park =>
       park.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      park.address.toLowerCase().includes(searchQuery.toLowerCase())
+      park.location.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleBook = (parkId: string) => {
@@ -86,16 +80,34 @@ const UserHome = () => {
 
       {/* Park Cards */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">Nearby Parking ({filteredParks.length})</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredParks.map(park => (
-            <ParkCard
-              key={park.id}
-              {...park}
-              onBook={handleBook}
-            />
-          ))}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Nearby Parking ({filteredParks.length})</h2>
+          {loading && <Loader2 className="animate-spin text-muted-foreground" size={20} />}
         </div>
+
+        {filteredParks.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredParks.map(park => (
+              <ParkCard
+                key={park.id}
+                id={park.id.toString()}
+                name={park.name}
+                address={park.location}
+                distance={`${park.distance?.toFixed(1) || '0.1'} km`}
+                availableSlots={park.available_slots}
+                totalSlots={park.total_slots}
+                pricePerHour={park.hourly_rate}
+                onBook={handleBook}
+              />
+            ))}
+          </div>
+        ) : (
+          !loading && (
+            <div className="text-center py-12 rounded-xl bg-muted/20 border border-dashed border-border">
+              <p className="text-muted-foreground">No parking locations found matching your search.</p>
+            </div>
+          )
+        )}
       </div>
     </div>
   );

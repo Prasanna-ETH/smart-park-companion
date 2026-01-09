@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import ParkingSlot, { SlotStatus } from './ParkingSlot';
 
-interface Slot {
+export interface Slot {
   id: string;
   number: string;
   status: SlotStatus;
@@ -13,12 +13,13 @@ interface ParkingGridProps {
   onSlotSelect?: (slotId: string) => void;
   selectable?: boolean;
   selectedSlot?: string | null;
+  customSlots?: Slot[];
 }
 
 const generateSlots = (rows: number, cols: number): Slot[] => {
   const slots: Slot[] = [];
   const statuses: SlotStatus[] = ['available', 'occupied', 'available', 'occupied', 'available'];
-  
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const rowLetter = String.fromCharCode(65 + row);
@@ -39,15 +40,22 @@ const ParkingGrid: React.FC<ParkingGridProps> = ({
   onSlotSelect,
   selectable = false,
   selectedSlot = null,
+  customSlots,
 }) => {
   const [slots, setSlots] = useState<Slot[]>([]);
 
   useEffect(() => {
-    setSlots(generateSlots(rows, cols));
-  }, [rows, cols]);
+    if (customSlots) {
+      setSlots(customSlots);
+    } else {
+      setSlots(generateSlots(rows, cols));
+    }
+  }, [rows, cols, customSlots]);
 
-  // Simulate real-time updates
+  // Simulate real-time updates only if no custom slots
   useEffect(() => {
+    if (customSlots) return;
+
     const interval = setInterval(() => {
       setSlots(prev => {
         const newSlots = [...prev];
@@ -63,7 +71,7 @@ const ParkingGrid: React.FC<ParkingGridProps> = ({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [selectedSlot]);
+  }, [selectedSlot, customSlots]);
 
   const handleSlotClick = (slot: Slot) => {
     if (!selectable || slot.status === 'occupied') return;
@@ -93,8 +101,8 @@ const ParkingGrid: React.FC<ParkingGridProps> = ({
           )}
         </div>
       </div>
-      
-      <div 
+
+      <div
         className="grid gap-2"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >

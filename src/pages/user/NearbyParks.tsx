@@ -1,67 +1,45 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ParkCard from '@/components/ParkCard';
-import { MapPin, Navigation } from 'lucide-react';
+import { MapPin, Navigation, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
+import { toast } from 'sonner';
 
-const mockParks = [
-  {
-    id: '1',
-    name: 'MG Road Parking Hub',
-    address: '123 MG Road, Bengaluru',
-    distance: '0.8 km',
-    availableSlots: 12,
-    totalSlots: 50,
-    pricePerHour: 40,
-  },
-  {
-    id: '2',
-    name: 'Phoenix Mall Basement',
-    address: 'Phoenix Marketcity, Whitefield',
-    distance: '1.2 km',
-    availableSlots: 35,
-    totalSlots: 200,
-    pricePerHour: 60,
-  },
-  {
-    id: '3',
-    name: 'Indiranagar Metro Station',
-    address: 'CMH Road, Indiranagar',
-    distance: '2.1 km',
-    availableSlots: 5,
-    totalSlots: 30,
-    pricePerHour: 30,
-  },
-  {
-    id: '4',
-    name: 'UB City Premium Parking',
-    address: 'Vittal Mallya Road',
-    distance: '3.5 km',
-    availableSlots: 28,
-    totalSlots: 100,
-    pricePerHour: 80,
-  },
-  {
-    id: '5',
-    name: 'Koramangala Forum Mall',
-    address: 'Forum Mall, Koramangala',
-    distance: '4.2 km',
-    availableSlots: 45,
-    totalSlots: 150,
-    pricePerHour: 50,
-  },
-  {
-    id: '6',
-    name: 'Electronic City Infosys Gate',
-    address: 'Electronic City Phase 1',
-    distance: '8.5 km',
-    availableSlots: 120,
-    totalSlots: 300,
-    pricePerHour: 25,
-  },
-];
+interface Park {
+  id: number;
+  name: string;
+  location: string;
+  distance: number;
+  available_slots: number;
+  total_slots: number;
+  hourly_rate: number;
+}
 
 const NearbyParks = () => {
   const navigate = useNavigate();
+  const [parks, setParks] = useState<Park[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchNearbyParks();
+  }, []);
+
+  const fetchNearbyParks = async () => {
+    setLoading(true);
+    try {
+      // Use Bengaluru as default loc for demo
+      const lat = 12.9716;
+      const lon = 77.5946;
+      const response = await api.get(`/user/parks/nearby?lat=${lat}&lon=${lon}&radius=20`);
+      setParks(response.data);
+    } catch (error) {
+      console.error('Failed to fetch parks', error);
+      toast.error('Failed to load nearby parks');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -70,8 +48,13 @@ const NearbyParks = () => {
           <h1 className="text-2xl font-bold">Nearby Parks</h1>
           <p className="text-muted-foreground">All parking locations sorted by distance</p>
         </div>
-        <Button variant="outline" className="gap-2">
-          <Navigation size={16} />
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={() => fetchNearbyParks()}
+          disabled={loading}
+        >
+          {loading ? <Loader2 className="animate-spin" size={16} /> : <Navigation size={16} />}
           Use My Location
         </Button>
       </div>
@@ -84,22 +67,49 @@ const NearbyParks = () => {
           <p className="text-sm text-muted-foreground">Google Maps integration coming soon</p>
         </div>
         {/* Decorative markers */}
-        <div className="absolute top-8 left-12 w-3 h-3 rounded-full bg-slot-available animate-pulse" />
-        <div className="absolute top-16 right-24 w-3 h-3 rounded-full bg-slot-available animate-pulse" />
-        <div className="absolute bottom-12 left-1/3 w-3 h-3 rounded-full bg-slot-occupied animate-pulse" />
-        <div className="absolute bottom-20 right-16 w-3 h-3 rounded-full bg-slot-available animate-pulse" />
-      </div>
-
-      {/* Park List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockParks.map(park => (
-          <ParkCard
+        {parks.map((park, i) => (
+          <div
             key={park.id}
-            {...park}
-            onBook={(id) => navigate(`/user/book/${id}`)}
+            className={`absolute w-3 h-3 rounded-full ${park.available_slots > 0 ? 'bg-slot-available' : 'bg-slot-occupied'} animate-pulse`}
+            style={{
+              top: `${20 + (i * 15) % 60}%`,
+              left: `${15 + (i * 25) % 70}%`
+            }}
           />
         ))}
       </div>
+
+      {/* Park List */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="animate-spin text-primary mb-2" size={32} />
+          <p className="text-muted-foreground">Finding the best spots for you...</p>
+        </div>
+      ) : parks.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {parks.map(park => (
+            <ParkCard
+              key={park.id}
+              id={park.id.toString()}
+              name={park.name}
+              address={park.location}
+              distance={`${park.distance?.toFixed(1) || '0.1'} km`}
+              availableSlots={park.available_slots}
+              totalSlots={park.total_slots}
+              pricePerHour={park.hourly_rate}
+              onBook={(id) => navigate(`/user/book/${id}`)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 bg-muted/10 border border-dashed rounded-xl">
+          <MapPin className="mx-auto text-muted-foreground mb-3" size={40} />
+          <h3 className="text-lg font-medium">No Parks Found</h3>
+          <p className="text-muted-foreground max-w-xs mx-auto">
+            We couldn't find any parking facilities within the selected radius. Try expanding your search.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

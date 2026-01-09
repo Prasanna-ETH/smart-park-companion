@@ -36,15 +36,24 @@ const Auth = () => {
     setIsLoading(true);
     try {
       if (mode === 'login') {
-        await login(email, password, selectedRole);
+        const user = await login(email, password);
+        toast({
+          title: 'Welcome to SmartPark!',
+          description: `You're now logged in as ${user.role === 'owner' ? 'a Parking Owner' : 'a Driver'}.`,
+        });
+        navigate(user.role === 'owner' ? '/owner' : '/user');
       } else {
-        await register(email, password, name, selectedRole);
+        await register(email, password, name, selectedRole!);
+        toast({
+          title: 'Welcome to SmartPark!',
+          description: `You're now logged in as ${selectedRole === 'owner' ? 'a Parking Owner' : 'a Driver'}.`,
+        });
+        // After register, we might want to auto-login or redirect to login. 
+        // Current implementation of register in AuthContext doesn't auto-login (it just posts).
+        // So we should probably switch mode to login or navigate.
+        // For now, let's switch to login mode as the toast says "Registration successful! Please login."
+        setMode('login');
       }
-      toast({
-        title: 'Welcome to SmartPark!',
-        description: `You're now logged in as ${selectedRole === 'owner' ? 'a Parking Owner' : 'a Driver'}.`,
-      });
-      navigate(selectedRole === 'owner' ? '/owner' : '/user');
     } catch {
       toast({
         title: 'Authentication failed',
@@ -80,7 +89,7 @@ const Auth = () => {
           <p className="mt-4 text-lg text-white/70 text-center max-w-md">
             Real-time parking management powered by AI. Find, book, and manage parking spaces effortlessly.
           </p>
-          
+
           {/* Animated parking illustration */}
           <div className="mt-12 grid grid-cols-4 gap-2">
             {Array.from({ length: 8 }).map((_, i) => (

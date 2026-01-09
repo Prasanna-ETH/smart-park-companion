@@ -1,50 +1,107 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ParkingGrid from '@/components/ParkingGrid';
+import ParkingGrid, { Slot } from '@/components/ParkingGrid';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Calendar, Clock, IndianRupee, QrCode } from 'lucide-react';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { ArrowLeft, Calendar, Clock, IndianRupee, QrCode, Loader2 } from 'lucide-react';
+import api from '@/lib/api';
+
+interface ParkDetail {
+  id: number;
+  name: string;
+  location: string;
+  hourly_rate: number;
+  slots: {
+    id: number;
+    slot_number: string;
+    is_occupied: boolean;
+  }[];
+}
 
 const BookParking = () => {
   const { parkId } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('');
+  const [park, setPark] = useState<ParkDetail | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState('10:00');
   const [duration, setDuration] = useState('1');
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  const pricePerHour = 40;
+  useEffect(() => {
+    fetchParkDetails();
+  }, [parkId]);
+
+  const fetchParkDetails = async () => {
+    try {
+      const response = await api.get(`/user/parks/${parkId}`);
+      setPark(response.data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to load parking details');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const pricePerHour = park?.hourly_rate || 0;
   const totalPrice = parseInt(duration) * pricePerHour;
 
   const handleBooking = async () => {
-    if (!selectedSlot || !date || !startTime) {
-      toast({
-        title: 'Missing information',
-        description: 'Please select a slot, date, and time.',
-        variant: 'destructive',
-      });
+    if (!selectedSlotId || !date || !startTime) {
+      toast.error('Please select a slot, date, and time.');
       return;
     }
 
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowConfirmation(true);
+    try {
+      // Calculate start_time as ISO string for backend
+      const startDateTime = new Date(`${date}T${startTime}`);
+
+      await api.post('/user/bookings', {
+        slot_id: parseInt(selectedSlotId),
+        start_time: startDateTime.toISOString(),
+        duration_hours: parseInt(duration),
+        amount: totalPrice
+      });
+
+      setShowConfirmation(true);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.detail || 'Booking failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  if (isFetching) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="animate-spin text-primary mb-4" size={40} />
+        <p className="text-muted-foreground">Loading park layout...</p>
+      </div>
+    );
+  }
+
+  if (!park) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-xl font-bold">Park Not Found</h2>
+        <Button onClick={() => navigate('/user')} className="mt-4">Go Back</Button>
+      </div>
+    );
+  }
+
+  const gridSlots: Slot[] = park.slots.map(s => ({
+    id: s.id.toString(),
+    number: s.slot_number,
+    status: s.is_occupied ? 'occupied' : 'available'
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -57,8 +114,8 @@ const BookParking = () => {
       </button>
 
       <div>
-        <h1 className="text-2xl font-bold">Book Parking</h1>
-        <p className="text-muted-foreground">Park ID: {parkId}</p>
+        <h1 className="text-2xl font-bold">{park.name}</h1>
+        <p className="text-muted-foreground">{park.location}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -66,11 +123,10 @@ const BookParking = () => {
         <div className="lg:col-span-2">
           <h2 className="text-lg font-semibold mb-4">Select a Slot</h2>
           <ParkingGrid
-            rows={4}
-            cols={5}
             selectable
-            selectedSlot={selectedSlot}
-            onSlotSelect={setSelectedSlot}
+            selectedSlot={selectedSlotId}
+            onSlotSelect={setSelectedSlotId}
+            customSlots={gridSlots}
           />
         </div>
 
@@ -80,10 +136,12 @@ const BookParking = () => {
             <h3 className="font-semibold mb-4">Booking Details</h3>
 
             <div className="space-y-4">
-              {selectedSlot && (
+              {selectedSlotId && (
                 <div className="p-3 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 animate-scale-in">
                   <p className="text-sm text-muted-foreground">Selected Slot</p>
-                  <p className="text-xl font-bold text-neon-cyan">{selectedSlot}</p>
+                  <p className="text-xl font-bold text-neon-cyan">
+                    {gridSlots.find(s => s.id === selectedSlotId)?.number}
+                  </p>
                 </div>
               )}
 
@@ -154,11 +212,11 @@ const BookParking = () => {
             className="w-full"
             size="lg"
             onClick={handleBooking}
-            disabled={!selectedSlot || isLoading}
+            disabled={!selectedSlotId || isLoading}
           >
             {isLoading ? (
               <>
-                <LoadingSpinner size="sm" className="mr-2" />
+                <Loader2 className="animate-spin mr-2" size={18} />
                 Processing...
               </>
             ) : (
@@ -168,34 +226,32 @@ const BookParking = () => {
         </div>
       </div>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-center">Booking Confirmed! 🎉</DialogTitle>
-            <DialogDescription className="text-center">
-              Your parking spot has been reserved.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center py-6">
-            <div className="w-32 h-32 bg-muted rounded-xl flex items-center justify-center mb-4">
-              <QrCode size={64} className="text-neon-cyan" />
-            </div>
-            <p className="text-sm text-muted-foreground text-center">
-              Show this QR code at the parking entrance
-            </p>
-            <div className="mt-4 text-center">
-              <p className="font-semibold">Slot: {selectedSlot}</p>
-              <p className="text-sm text-muted-foreground">
-                {date} at {startTime} ({duration}hr)
+      {/* Confirmation Modal (Simplified using conditional rendering for speed) */}
+      {showConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <h2 className="text-2xl font-bold text-center mb-2">Booking Confirmed! 🎉</h2>
+            <p className="text-muted-foreground text-center mb-6">Your parking spot has been reserved.</p>
+
+            <div className="flex flex-col items-center py-6 bg-muted/30 rounded-lg mb-6">
+              <QrCode size={128} className="text-neon-cyan mb-4" />
+              <p className="text-sm text-muted-foreground text-center px-4">
+                Show this QR code at the parking entrance
               </p>
+              <div className="mt-4 text-center">
+                <p className="font-semibold text-lg">Slot: {gridSlots.find(s => s.id === selectedSlotId)?.number}</p>
+                <p className="text-sm text-muted-foreground">
+                  {date} at {startTime} ({duration}hr)
+                </p>
+              </div>
             </div>
+
+            <Button onClick={() => navigate('/user/bookings')} className="w-full">
+              View My Bookings
+            </Button>
           </div>
-          <Button onClick={() => navigate('/user/bookings')} className="w-full">
-            View My Bookings
-          </Button>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,67 +1,91 @@
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '@/components/StatCard';
-import { TrendingUp, Users, Clock, Car } from 'lucide-react';
-
-const weeklyData = [
-  { day: 'Mon', revenue: 4200, occupancy: 78 },
-  { day: 'Tue', revenue: 3800, occupancy: 65 },
-  { day: 'Wed', revenue: 5100, occupancy: 82 },
-  { day: 'Thu', revenue: 4600, occupancy: 75 },
-  { day: 'Fri', revenue: 6200, occupancy: 92 },
-  { day: 'Sat', revenue: 7100, occupancy: 95 },
-  { day: 'Sun', revenue: 5400, occupancy: 88 },
-];
-
-const hourlyData = [
-  { hour: '6AM', vehicles: 12 },
-  { hour: '9AM', vehicles: 45 },
-  { hour: '12PM', vehicles: 38 },
-  { hour: '3PM', vehicles: 42 },
-  { hour: '6PM', vehicles: 55 },
-  { hour: '9PM', vehicles: 28 },
-];
-
-const vehicleTypes = [
-  { name: 'Cars', value: 65 },
-  { name: 'Bikes', value: 25 },
-  { name: 'Others', value: 10 },
-];
+import { TrendingUp, Users, Clock, Car, Loader2 } from 'lucide-react';
+import api from '@/lib/api';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--neon-cyan))', 'hsl(var(--muted-foreground))'];
 
 const Analytics = () => {
+  const [loading, setLoading] = useState(true);
+  const [parkId, setParkId] = useState<number | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const { data: parks } = await api.get('/owner/parks');
+      if (parks && parks.length > 0) {
+        const id = parks[0].id;
+        setParkId(id);
+
+        const [analyticsRes, dashboardRes] = await Promise.all([
+          api.get(`/owner/analytics/${id}`),
+          api.get(`/owner/dashboard/${id}`)
+        ]);
+
+        setAnalyticsData(analyticsRes.data);
+        setDashboardData(dashboardRes.data);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  const vehicleTypes = [
+    { name: 'Cars', value: 65 },
+    { name: 'Bikes', value: 25 },
+    { name: 'Others', value: 10 },
+  ];
+
+  const occupancyRate = dashboardData ? Math.round((dashboardData.occupied_slots / dashboardData.total_slots) * 100) : 0;
+  const revenue = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(dashboardData?.total_revenue || 0);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-muted-foreground">Insights and trends for your parking facility</p>
+        <p className="text-muted-foreground">Insights and trends for your parking facility: {dashboardData?.park_name}</p>
       </div>
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Weekly Revenue"
-          value="₹36,400"
+          title="Total Revenue"
+          value={revenue}
           icon={TrendingUp}
           trend={{ value: 12, isPositive: true }}
           variant="success"
         />
         <StatCard
-          title="Avg. Occupancy"
-          value="82%"
+          title="Current Occupancy"
+          value={`${occupancyRate}%`}
           icon={Car}
           variant="default"
         />
         <StatCard
-          title="Unique Visitors"
-          value="847"
+          title="Total Slots"
+          value={dashboardData?.total_slots || 0}
           icon={Users}
-          trend={{ value: 8, isPositive: true }}
           variant="default"
         />
         <StatCard
-          title="Avg. Duration"
-          value="2.4 hrs"
+          title="Available"
+          value={dashboardData?.available_slots || 0}
           icon={Clock}
           variant="warning"
         />
@@ -69,13 +93,13 @@ const Analytics = () => {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart */}
+        {/* Revenue/Occupancy Trend Chart */}
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-semibold mb-4">Weekly Revenue (₹)</h3>
+          <h3 className="font-semibold mb-4">Revenue Trend (₹)</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={weeklyData}>
+            <BarChart data={analyticsData?.trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
               <Tooltip
                 contentStyle={{
@@ -89,14 +113,14 @@ const Analytics = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Hourly Traffic */}
+        {/* Occupancy Trend */}
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-semibold mb-4">Hourly Traffic</h3>
+          <h3 className="font-semibold mb-4">Occupancy Rate (%)</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={hourlyData}>
+            <LineChart data={analyticsData?.trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="hour" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} domain={[0, 100]} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
@@ -106,7 +130,7 @@ const Analytics = () => {
               />
               <Line
                 type="monotone"
-                dataKey="vehicles"
+                dataKey="occupancy"
                 stroke="hsl(var(--neon-cyan))"
                 strokeWidth={2}
                 dot={{ fill: 'hsl(var(--neon-cyan))' }}
@@ -157,24 +181,23 @@ const Analytics = () => {
           </div>
         </div>
 
-        {/* Occupancy Trend */}
+        {/* Top Busy Slots */}
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-semibold mb-4">Occupancy Rate (%)</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} domain={[0, 100]} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-              />
-              <Bar dataKey="occupancy" fill="hsl(var(--slot-available))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="font-semibold mb-4">Most Used Slots</h3>
+          <div className="space-y-4">
+            {analyticsData?.top_slots.map((s: any, i: number) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center font-bold text-xs">{s.slot}</span>
+                  <span className="text-sm font-medium">Popular Spot</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold">{s.count} times</span>
+                  <p className="text-xs text-muted-foreground">last 30 days</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
