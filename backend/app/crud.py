@@ -49,20 +49,28 @@ def get_nearby_parks(db: Session, lat: float, lon: float, radius_km: float = 5.0
                  nearby.append(park)
     return nearby
 
-def create_booking(db: Session, booking: schemas.BookingCreate, user_id: int):
-    # Find available slot
-    # Simple logic: first free slot
-    slot = db.query(models.Slot).filter(models.Slot.park_id == booking.park_id, models.Slot.is_occupied == False).first()
+def create_booking(db: Session, booking: schemas.BookingCreate, user_id: str):
+    # Use specific slot if provided, else find first free
+    if booking.slot_id:
+        slot = db.query(models.Slot).filter(models.Slot.id == booking.slot_id, models.Slot.is_occupied == False).first()
+    else:
+        slot = db.query(models.Slot).filter(models.Slot.park_id == booking.park_id, models.Slot.is_occupied == False).first()
+        
     if not slot:
         return None
     
     park = get_park(db, booking.park_id)
-    amount = park.hourly_rate * booking.duration_hours
+    # Use amount from request if provided (for flexibility), else calculate
+    amount = booking.amount if booking.amount else (park.hourly_rate * booking.duration_hours)
+
+    from datetime import timedelta
+    calculated_end = datetime.utcnow() + timedelta(hours=booking.duration_hours)
 
     db_booking = models.Booking(
         user_id=user_id,
         slot_id=slot.id,
-        end_time=datetime.utcnow(), # Needs proper calculation
+        start_time=datetime.utcnow(),
+        end_time=calculated_end,
         amount=amount,
         status="active"
     )

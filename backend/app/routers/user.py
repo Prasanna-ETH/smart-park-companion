@@ -69,3 +69,20 @@ def get_my_bookings(
             "amount": b.amount
         })
     return results
+
+@router.get("/stats")
+def get_user_stats(
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    total_parkings = db.query(models.Booking).filter(models.Booking.user_id == current_user.id).count()
+    upcoming = db.query(models.Booking).filter(
+        models.Booking.user_id == current_user.id, 
+        models.Booking.status.in_(["upcoming", "active"])
+    ).count()
+    
+    return {
+        "total_parkings": total_parkings,
+        "upcoming": upcoming,
+        "wallet_balance": 1240.0 # Mock wallet for now
+    }
